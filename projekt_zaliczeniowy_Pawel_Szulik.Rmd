@@ -1,0 +1,385 @@
+---
+title: Skoki narciarskie mężczyzn 2013/14 - EDA
+author: "Paweł Szulik"
+date: "2026-01-27"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    code_folding: hide
+
+---
+## Sekcja pakietów
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(psych)
+library(ggplot2)
+library(corrplot)
+```
+
+# Wprowadzenie
+Podjąłem się analizy zbioru danych o skokach narciarskich. Oryginalny zbiór danych został pobrany ze strony Kaggle: (https://www.kaggle.com/datasets/wrotki8778/ski-jumping-results-database-2009now). Złożony jest z 5 podzbiorów, (ja na potrzeby mojej analizy będę korzystał tylko z 4, bez `all_ratings`) z których osobno zbyt wiele by nie wynikało, dlatego na potrzeby analizy, zanim jeszcze zacznę opisywać zmienne, muszę utworzyć jeden ostateczny zbiór, który będzie połączeniem wszystkich podzbiorów.
+
+# Przygotowanie danych
+ 
+## Łączenie zbiorów
+Na 4 podzbiory składają się: `konkursy` - zawiera dane o wszystkich rozegranych konkursach z 2009-2021, `skoczkowie`- zawiera dane o wszystkich skoczkach z tego okresu `wyniki` - zawiera dane o wszystkich zarejestrowanych wynikach skoków z tego okresu, `statystyki` - zawiera statystyki pogodowe każdego z konkursów.
+```{r}
+konkursy   <- read.csv("all_comps.csv")
+skoczkowie <- read.csv("all_names.csv")
+wyniki     <- read.csv("all_results.csv")
+statystyki <- read.csv("all_stats.csv")
+```
+Swoją analizę będę chciał przeprowadzić, na okrojonych danych, gdyż oryginalny zbiór danych jest zbyt duży. Będę pracował na danych za sezon zimowy 2013/14 mężczyzn. Sezon ten rozpoczął się 22.11.2013r., a skończył się 23.03.2014r. Wstępnie filtruję dane o konkursach. Moim celem jest zobaczenie, czy uzyskam informacje o skokach ze wszystkich interesujących mnie konkursów, treningów i serii próbnych - ostateczne dane i tak będą musiały zostać ponownie przefiltrowane, to filtrowanie jest czysto poglądowe, mogłoby zostać pominięte.
+```{r}
+konkursy_przefiltrowane <- konkursy %>%
+  filter(season == "2014", date >= "2013-11-22")
+```
+W tabeli o skoczkach zauważam pierwszy problem, autor danych zescrapował je w taki sposób, że część skoczków się zduplikowała(rekordy różnią się literą, ale to jest ta sama osoba), przez co występują dwie osoby o takim samym codexie (id_skoczka). Pozbywamy się duplikatów codexów, jednocześnie zostawiamy przypisane im imiona i nazwiska skoczków.
+```{r}
+skoczkowie <- skoczkowie %>%
+  arrange(codex)
+
+head(skoczkowie, 5)
+
+skoczkowie %>%
+  count(codex) %>%
+  filter(n>1) %>%
+  summarise(liczba_przypadkow = n())
+
+skoczkowie_unikatowi <- skoczkowie %>%
+  distinct(codex, .keep_all = TRUE)
+
+skoczkowie_unikatowi %>%
+  count(codex) %>%
+  filter(n>1) %>%
+  summarise(liczba_przypadkow = n())
+```
+Dalej mamy tabele statystyk i wyników, znajdujemy w nich następujące problemy: w tabeli statystyki trzeba zmienic nazwy kolumn, aby mozna bylo polaczyc, po kluczach z pozostałymi tabelami. Naszym kluczem bedzie tez round, dlatego sprawdzamy, czy nie trzeba tam czegos pozmieniac, w danych. Jest OK.
+```{r}
+head(statystyki, 3)
+head(wyniki, 3)
+
+table(statystyki$round_type)
+table(wyniki$round)
+
+
+statystyki <- statystyki %>%
+  rename(id = fis_code, round = round_type)
+
+```
+Wszystkie tabele wydają się w porządku, teraz pora je połączyć. Wynikom przypisuję skoczków po codexie (id_skoczka). Do tej tabeli dołączam dane o konkursach, po id (konkursu). Do utworzonej tabeli dołączam dane o statystykach konkursów i mam ostateczną tabelę: `ostateczne_dane`, na podstawie której będę prowadził swoją analizę. Dodatkowo, przefiltruję już wstepnie dane, aby brać pod uwagę, tylko sezon zimowy mężczyzn 2013/14.
+```{r}
+wyn_sko <- left_join(wyniki, skoczkowie_unikatowi,by = "codex")
+
+wyn_sko_kon <- left_join(wyn_sko, konkursy_przefiltrowane, by = "id")
+
+ostateczne_dane <- left_join(wyn_sko_kon, statystyki, by = c("id", "round"))
+
+ostateczne_dane <- ostateczne_dane %>%
+  filter(date >= "2013-11-22", gender == "Men")
+```
+
+
+## Opis zmiennych
+Wybiorę teraz zmienne, które w mojej opinii będą istotne dla mojej analizy. Odrzucam te, które będą niepotrzebne. Zmieniam też nazwy zmiennych, aby ułatwić analizę. Ustawiam dane według daty - od najwcześniejszych skoków w sezonie, po najpóźniejsze.
+```{r}
+ostateczne_dane <- ostateczne_dane %>%
+  select(date, id, team, place, hill_size_x, k.point, round, training, codex.x, bib, name, dist, speed, points, note_points, wind, wind_comp, gate.x, gate.y, gate_points, humid, snow, air, weather_type) %>%
+  rename(competition_id = id, location = place, hill_size=hill_size_x, skijumper_id=codex.x, points_overall=points, wind_compensation=wind_comp, jump_gate=gate.x, competition_start_gate=gate.y, starting_number=bib, air_temperature=air, snow_temperature=snow) %>%
+  arrange(date)
+
+```
+
+- `date` - data konkursu
+- `competition_id` - id konkursu
+- `team `- czy konkurs byl druzynowy czy nie (0 - nie, 1 - tak)
+- `location`- miejscowosc, w ktorej rozgrywany byl konkurs
+- `hill_size` - rozmiar skoczni
+- `k_point` - punkt konkstrukcyjny skoczni
+- `round` - numer i typ rundy
+- `training` - czy skok byl treningiem (0 - nie, 1 - tak)
+- `ski_jumper_id` - id skoczka
+- `starting_number` - numer startowy skoczka
+- `dist` - odległość skoku mierzona w m
+- `speed` - prędkość na progu w km/h
+- `points` - punkty za skok
+- `note_points` - punkty za notę
+- `wind` - predkosc wiatru w m/s (>0 - wiatr pod narty, <0 - wiatr w plecy)
+- `wind_comp` - rekompensata za wiatr
+- `jump_gate` - belka startowa skoku
+- `competition_start_gate` - belka z ktorej rozpoczal sie konkurs
+- `starting_number` - numer startowy skoczka
+- `humid` - wilgotność powietrza (0-100%)
+- `snow_temprature` - temperatura śniegu na podjeździe (w Celsjuszach)
+- `air_temperature` - temperatura powietrza (w Celsjuszach)
+- `weather type` - ogólny typ pogody panujący w trakcie konkursu
+
+
+## Filtrowanie danych
+Patrzę teraz na strukturę przygotowanego już pliku.
+```{r}
+str(ostateczne_dane)
+```
+Kolejną rzeczą, jaką chcę zrobić, to przekształcić zmienne kategoryczne na factory i zmienną `date` na format date, bo jest obecnie jako character. Sprawdzam strukturę potencjalnych zmiennych kategorycznych. Przy zmiennej weather_type uzywam funkcji `str_trim()`, zeby naprawic dane, ktore mają te same wartosci, ale sa liczone osobno, bo jest spacja np. sunny i cloudy. Zmienna team daje jako factor osobno, dodaje levels. Dla zmiennej round mam problem - wartości 2nd round i final round są rozdzielone + final round jest zapisane na wiele sposobów (dane ze spacjami - używam `str_trim()`), ale oznaczają to samo. Zamieniam wartości final round na 2nd round, aby ujednolicić dane.
+```{r}
+table(ostateczne_dane$weather_type)
+table(ostateczne_dane$location)
+table(ostateczne_dane$round)
+table(ostateczne_dane$team)
+table(ostateczne_dane$training)
+
+
+ostateczne_dane <- ostateczne_dane %>%
+  mutate(round=str_trim(round), round = if_else(round == "final round", "2nd round", round))
+
+ostateczne_dane <- ostateczne_dane %>%
+  mutate(date=as.Date(date), weather_type=as.factor(str_trim(weather_type)), location=as.factor(location),
+         round=as.factor(round))
+
+ostateczne_dane$team <- factor(ostateczne_dane$team, levels = c(0,1))
+
+table(ostateczne_dane$round)
+```
+Wyznaczam statystyki, `describe` tylko dla numerycznych, tam gdzie jest sens
+```{r}
+summary(ostateczne_dane)
+
+ostateczne_dane %>%
+  select(dist, speed, points_overall, note_points, wind, wind_compensation, jump_gate, gate_points) %>%
+  describe()
+```
+Zajmujemy się teraz brakami danych. Najwięcej braków danych mam w Punktach - to dosyć ważna zmienna, jednakże jest to prawdopodobnie spowodowane tym, że w seriach treningowych, punkty nie są liczone. Podejmuję decyzję, sprawdzam zależności związane z punktacją skoku, tylko dla skoków konkursowych.
+```{r}
+colSums(is.na(ostateczne_dane))
+table(ostateczne_dane$training)
+
+ostateczne_dane <- ostateczne_dane %>%
+  filter(training == 0, round!='qualification')
+
+colSums(is.na(ostateczne_dane))
+```
+Mam ostatni problem z brakami - 1000 obserwacji, w których nie ma wartości przy wietrze, rekompensacie za wiatr, belce i punktach za belkę. Jest to spowodowane tym, że w sezonie 2013/14 FiS dopiero wprowadzał ideę punktów za wiatr i za belkę - wcześniej liczyła się tylko odległość i noty, dlatego niektóre konkursy nie zawierały takich danych. Na potrzeby mojej analizy, pominę te dane. Mam również, niewielką ilość braków w zmiennych `competition_start_gate`, `air_temperature`, `humid`, `snow_temperature`. Pomijam te dane, jest to bardzo niewielka część moich obserwacji - nie wpłynie to na zależności, które będę chciał pokazać.
+```{r}
+ostateczne_dane <- ostateczne_dane %>%
+  filter(!is.na(wind)) %>%
+  filter(!is.na(competition_start_gate)) %>%
+  filter(!is.na(humid))
+
+colSums(is.na(ostateczne_dane))
+
+```
+Pozbyliśmy się wszystkich braków. Możemy przejść do analizy.
+
+# Analiza danych
+
+### 1.Rozkład długości skoku
+Chcąc pokazać rozkład długości skoku, nierozsądnym byłoby od razu robienie wykresu, ponieważ w moich danych, zawarte są różne skocznie, stąd analizowanie długości skoku, gdzie ma się skocznie o różnych rozmiarach, byłoby niemiarodajne. Utworzę dlatego zmienną `dist_prop`, która będzie proporcją długości skoku, do punktu konstrukcyjnego skoczni, na której skok został oddany. Wtedy rozkład dla tej zmiennej będzie miał większy sens.
+
+```{r}
+ostateczne_dane$dist_prop<-(ostateczne_dane$dist/ostateczne_dane$k.point)
+
+ostateczne_dane %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x=dist_prop), col="black", fill="lightblue", bins =30) +
+  labs(title="Rozkład proporcji długości skoku do punktu k skoczni",
+       x="proporcja odległości do punktu k danej skoczni(>1 - skok za punkt k, <1 - skok przed punktem k)",
+       y="liczba skoków")
+```
+
+**wnioski:**
+Widzimy na podstawie wykresu, że rozkład długości skoku, w zależności od skoczni, jest lewostronnie skośny. Najwięcej skoczków skacze kawałek dalej niż punkt k, lecz ilość skoczków, którzy nie dolatują do punktu k, jest znacznie większa, w porównaniu do tych, którzy lecą dalej - więcej skoków krótszych niż dalszych.
+
+### 2. Rozkład długości skoku w zależności od serii konkursu
+
+W pierwszej serii konkursu skaczą wszyscy zakwalifikowani skoczkowie, w drugiej zostaje najlepsza trzydziestka. Można by założyć hipotezę, że skoczkowie z drugiej serii, powinni latać dalej, czy tak będzie naprawdę?
+
+```{r}
+ostateczne_dane %>%
+  ggplot() +
+  geom_density(mapping = aes(x=dist_prop, fill = round), alpha=0.5) +
+  labs(title="Rozkład proporcji długości skoku do punktu k skoczni w zależności na rundę",
+       x="proporcja odległości do punktu k danej skoczni",
+       y="gęstość",
+       fill="runda")
+```
+
+**wnioski:**
+Rozkład pozostaje podobny do ogólnego rozkładku skoków i faktycznie widzimy, że skoczkowie w drugiej rundzie skaczą częściej za punkt k, w porównaniu do skoczków z 1 rundy. Jest to spowodowane tym, że w drugiej rundzie zostają tylko lepsi skoczkowie.
+
+### 3. Długości skoków w konkursach drużynowych, a w indywidualnych.
+Długość skoku można jeszcze analizować pod względem typu konkursu. W skokach narciarskich na czas sezonu 2013/14 istniały dwa typy konkursów: indywidualne (każdy skacze dla siebie), drużynowe (skoczkowie skaczą w drużynach po 4 skoczków, na państwo).
+Czy skoczkowie będą dalej latać, gdy skaczą dla siebie czy gdy skaczą dla drużyny?
+
+```{r}
+ostateczne_dane %>%
+  ggplot() +
+  geom_density(mapping = aes(x=dist_prop, fill = team), alpha=0.5) +
+  labs(title="Rozkład proporcji długości skoku do punktu k skoczni w zależności na typ konkursu",
+       x="proporcja odległości do punktu k danej skoczni",
+       y="gęstość",
+       fill="typ konkursu(0 - indywidualny, 1 - drużynowy)")
+```
+
+**wnioski:**
+Rozkłady są praktycznie identyczne - nie można zatem wnioskować, że typ konkursu wpływa na odległość skoku uczestnika. Można stwierdzić, że w obu przypadkach skoczkowie dają z siebie wszystko.
+
+### 4. Długość skoku, a skocznia
+Długość skoku można jeszcze analizować pod kątem miejscowości i konkretnej skoczni, na której skok został oddany. Na których skoczniach skoczkowie radzą sobie najlepiej, a na których najgorzej?
+```{r}
+ostateczne_dane %>%
+  ggplot() +
+  geom_boxplot(aes(x=location, y=dist_prop), fill="lightblue") +
+  labs(title="Długość skoku w zależności od skoczni",
+       x="skocznia",
+       y="proporcja odległości punktu k danej skoczni") +
+  coord_flip()
+
+ostateczne_dane %>%
+  group_by(location) %>%
+  summarise(mediana = median(dist_prop), srednia = mean(dist_prop)) %>%
+arrange(desc(mediana))
+
+ostateczne_dane %>%
+  group_by(location) %>%
+  summarise(mediana = median(dist_prop), srednia = mean(dist_prop)) %>%
+arrange(mediana)
+```
+
+**wnioski:**
+Na podstawie wykresu można stwierdzić, że skoczkowie oddawali dłuższe skoki  w Garmisch-Partenkirchen, Titisee-Neustadt . Natomiast krótsze skoki oddawane były w Iron Mountain, Nizhny Tagil. To porównanie, nie bierze pod uwagę warunków pogodowych czy innych czynników, do których przejdziemy później. Tu interesuje nas jeszcze sama odległość, a skocznia. Potwierdzeniem wyników z wykresu są obliczone przeze mnie statystyki opisowe.
+
+### 5. Jak na danej skoczni wygląda odsetek skoków oddanych poza jej rozmiar?
+Ciekawiło mnie, na których skoczniach skoczkowie częściej oddają skoki poza jej rozmiar. Do tego pytania potrzebna będzie mi nowa zmienna, która będzie stwierdzać czy dany skok został oddany poza rozmiar skoczni czy nie. Po odpowiednim filtrowaniu, robię wykres.
+```{r}
+ostateczne_dane <- ostateczne_dane %>%
+  mutate(over_hs = dist > hill_size)
+
+over_hs_ski_jump <- ostateczne_dane %>%
+  group_by(location) %>%
+  summarise(
+    percent_over_hs = mean(over_hs) * 100) %>%
+  arrange(desc(percent_over_hs))
+
+over_hs_ski_jump %>%
+  ggplot() +
+  geom_col(aes(x = reorder(location, percent_over_hs), y = percent_over_hs), col = 'black', fill='lightblue') +
+  coord_flip() +
+   labs(
+    title = "Odsetek skoków za HS w podziale na skocznię",
+    x = "nazwa skoczni",
+    y = "odsetek skoków poza HS (%)"
+  )
+
+
+```
+
+**wnioski:**
+Z wykresu możemy odczytać, że odsetek skoków poza rozmiar skoczni najwyższy był w Willingen (7,5%) i w Innsbrucku (6%). A skocznie, na których w sezonie 2013/14 w ogóle nie oddano skoków poza rozmiar skoczni (0%), to: Harrachov, Nizhny Tagil, Oslo, Predazzo, Trondheim.
+
+### 6. Którzy skoczkowie i ile razy latali za HS w sezonie 2013/14?
+
+Wiemy już na których skoczniach skoczkowie najczęściej oddawali skoki poza HS. Teraz pytanie, który ze skoczków oddał ich najwięcej? Tak jak wcześniej, najpierw filtrowanie i grupowanie, potem wykres (pokazuję tylko skoczków, co mieli więcej niż jeden skok za rozmiar skoczni).
+
+```{r message=FALSE}
+over_hs_ski_jumpers<- ostateczne_dane %>%
+  group_by(skijumper_id, name) %>%
+  summarise(
+    over_hs_jumps=sum(over_hs)
+  ) %>%
+  filter(over_hs_jumps > 1) %>%
+  arrange(desc(over_hs_jumps))
+
+over_hs_ski_jumpers %>%
+  ggplot() +
+  geom_col(aes (x = reorder(name, over_hs_jumps), y = over_hs_jumps), fill = "lightblue", col="black") +
+  coord_flip() +
+   scale_y_continuous(breaks = seq(0, max(over_hs_ski_jumpers$over_hs_jumps), by = 1)) +
+  labs(
+    title = "Zawodnicy z więcej niż jednym skokiem za HS",
+    x = "zawodnik",
+    y = "ilość skoków za HS"
+  )
+
+```
+
+**wnioski:**
+Widzimy, że najwięcej skoków za HS oddawali: Peter Prevc, Kamil Stoch i Severin Freund. Jest to trójka najlepszych zawodników pod względem punktacji w sezonie, z tym faktem, że Kamil Stoch wyprzedził Petera Prevca, który miał o jeden skok za rozmiar skoczni więcej. Widać, że ilość skoków za HS nie jest gwarancją wygranej w sezonie.
+
+### 7. Długość skoku, a pogoda panująca na skoczni.
+Ciekawym aspektem może być zależność pomiędzy długością skoku, a pogodą panującą na skoczni. Wiadomo, że warunki atmosferyczne mają wpływ na skok, teraz pytanie jest, w jakiej pogodzie, skoczkowie oddawali dłuższe skoki, a które warunki powodowały krótszy wynik.
+
+```{r}
+ostateczne_dane %>%
+  ggplot() +
+  geom_boxplot(aes(x=weather_type, y=dist_prop), fill="lightblue") +
+  labs(title="Długość skoku w zależności od pogody",
+       x="pogoda",
+       y="proporcja odległości punktu k danej skoczni") +
+  coord_flip()
+
+ostateczne_dane %>%
+  group_by(weather_type) %>%
+  summarise(mediana = median(dist_prop), srednia = mean(dist_prop), count = n()) %>%
+arrange(desc(mediana))
+
+
+```
+
+**wnioski:**
+Z powyższych wyników widzimy, że sposób zapisu zmiennej weather_type przez FiS sprawia, że ogólne określenie panującej pogody, nie jest bardzo miarodajne jeżeli chodzi o porównanie relacji z długością skoku. Jakbyśmy chcieli się uprzeć i coś z tego spróbować wywnioskować, to pominąłbym kategorie z mniejszą licznością <=50 i wtedy mógłbym wnioskować, że dłuższe skoki były oddawane w pogodzie pochmurnej, a w pogodzie gdzie deszcz padał ze śniegiem, skoki były krótsze. Jednak dla dokładniejszej analizy warto lepiej spojrzeć na konkretne wartości poszczególnych zmiennych pogodowych.
+
+### 8. Długość skoku, a konkretne warunki pogodowe.
+W moich danych mam kilka zmiennych opisujących już dokładniejsze warunki atmosferyczne. Są to: `wind` - prędkość wiatru w metrach na sekundę (dodatnia - wiatr pod narty, ujemna - wiatr z tyłu skoczni), `humid` - wilgotność powietrza, `snow_temperature` - temperatura śniegu na najeździe, `air_temperature` - temperatura powietrza. Mam kolejny problem - wartości zmiennych `humid`, `snow_temperature` i `air_temperature` są średnimi wartościami, dla danego konkursu, a nie dla konkretnego skoku. Zmienna `wind` już jest dla każdego skoku. Dlatego wykonam dwa porównania, jedną dla wiatru i drugą dla pozostałych zmiennych, mając na uwadze, że ich wartości są uśrednione. Do korelacji w tym i kolejnym podpunkcie używam metody spearmana - rozkład zmiennej "dist_prop" nie jest normalny.
+
+```{r}
+cor1=cor(ostateczne_dane[,c("dist_prop", "wind")], method="spearman")
+round(cor1, 2)
+
+cor2=cor(ostateczne_dane[,c("dist_prop", "humid", "snow_temperature", "air_temperature")], method = "spearman")
+
+corrplot(cor2, method = "square", type = "upper")
+```
+
+**wnioski:**
+Z policzonej korelacji dla zmiennej `wind` widzimy, że istnieje mała korelacja dodatnia - nie jest ona na tyle duża, aby istniał jakiś silniejszy związek. Dla zmiennych `humid`, `snow_temperature` i `air_temperature` korelacja jest bliska 0 - związki tym bardziej nie istnieją, może to być spowodowane tym, że korzystam z danych uśrednionych, bo inne nie występowały w oryginalnym zbiorze.
+
+### 9. Długość skoku, a statystyki techniczne.
+Po analizie warunków pogodowych, nie wyszło nam wiele zależności, w stosunku do długości oddanego skoku. Może patrząc od strony technicznej otrzymamy jakieś lepsze związki.
+Będziemy brali pod uwagę zmienne `speed` - prędkość na progu `note_points` - sumaryczna ocena sędziów, `jump_gate` - belka, z której skakał zawodnik. Badane zmienne znowu będziemy porównywać do długości lotu w stosunku do punktu k na danej skoczni.
+
+```{r}
+cor3=cor(ostateczne_dane[,c("dist_prop", "speed", "note_points", "jump_gate")], method="spearman")
+corrplot(cor3, method = "square", type = "upper")
+```
+
+**wnioski:**
+Z wykresu możemy odczytać, że wysoką dodatnią korelację w porównaniu z odległością ma `note_points` - z tego wynika, że sędziowie lepiej oceniają dłuższe skoki, co było spodziewane. Jednak pozostałe zmienne `speed` i `jump_gate` nie mają znaczącego związku z długością skoku. Logicznie nie ma to sensu, gdyż czy to prędkość na progu czy belka powinny wpływać na długość skoku, jednakże większość skoków jest oddawana na podobnym poziomie - różnice nie są na tyle duże, aby związek ten wyszedł istotnie duży.
+
+# Podsumowanie
+
+Skoki narciarskie to bardzo złożona tematyka, a zależności w niej można by się doszukiwać bez końca. Chciałbym krótko podsumować, jakie wnioski udało mi się wyciągnąć z przeprowadzonej EDA. (wszystkie wnioski oparte są tylko i wyłącznie na sezonie zimowym 2013/14 mężczyzn, na skokach konkursowych):
+
+- Rozkład długości skoku w zależności od skoczni jest lewostronny, jest więcej skoków przed punkt K niż za punkt K.
+
+- Skoczkowie w rundzie drugiej częściej oddają skoki za punkt k w porównaniu do skoczków z 1 rundy.
+
+- Skoczkowie oddają podobnie długie skoki zarówno w konkursach drużynowych jak i indywidualnych
+
+- Skoczkowie oddawali ogólnie dłuższe skoki w Garmisch-Partenkirchen, Titisee-Neustadt, a krótsze w Iron Mountain i Nizhny Tagil
+
+- Najwięcej skoków za hs było oddanych w Willingen i Innsbrucku, a ze skoczni, na których żaden skoczek nie doleciał za HS są: Harrachov, Nizhny Tagil, Oslo, Predazzo, Trondheim.
+
+- Najwięcej skoków w sezonie 2013/14 za HS oddawali Peter Prevc, Kamil Stoch i Severin Freund.
+
+- Związek pomiędzy warunkami pogodowymi, a odległością skoku jest niewielki - wynika to z danych (skoczkowie skaczą podobnie daleko, nie ma dużych różnic)
+
+- Istnieje dodatni związek pomiędzy odległością skoku a notami za styl, bramka i prędkość na progu, nie mają aż tak dużego znaczenia (przyczyna podobna jak z warunkami pogodowymi)
+
+
+
+
