@@ -1,17 +1,18 @@
 ---
 title: Skoki narciarskie mężczyzn 2013/14 - EDA
 author: "Paweł Szulik"
-date: "2026-01-27"
+date: "`r Sys.Date()`"
 output:
   html_document:
     theme: flatly
     highlight: tango
     toc: true
+    number_sections: true
     toc_float: true
     code_folding: hide
 
 ---
-## Sekcja pakietów
+# Sekcja pakietów
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(dplyr)
@@ -177,83 +178,109 @@ Pozbyliśmy się wszystkich braków. Możemy przejść do analizy.
 
 # Analiza danych
 
-### 1.Rozkład długości skoku
-Chcąc pokazać rozkład długości skoku, nierozsądnym byłoby od razu robienie wykresu, ponieważ w moich danych, zawarte są różne skocznie, stąd analizowanie długości skoku, gdzie ma się skocznie o różnych rozmiarach, byłoby niemiarodajne. Utworzę dlatego zmienną `dist_prop`, która będzie proporcją długości skoku, do punktu konstrukcyjnego skoczni, na której skok został oddany. Wtedy rozkład dla tej zmiennej będzie miał większy sens.
+## Zmienna dist_prop
+Ze względu na niejednolite rozmiary skoczni, będę potrzebował zmiennej, która pozwoli mi badać długość skoku, nie jako odległość, ale jako proporcję uzyskanej odległości skoczka do punktu konstrukcyjnego skoczni `k.point`. Pozwoli mi to na uzyskanie sensownych i rzetelnych wyników teraz i w trakcie całej mojej analizy.
+Zmienna `dist_prop` będzie przyjmowała wartości:
+- mniejsze od 1 - co będzie oznaczało skok przed punktem k danej skoczni
+- większe od 1 - co będzie oznaczało skok za punkt k danej skoczni
 
 ```{r}
 ostateczne_dane$dist_prop<-(ostateczne_dane$dist/ostateczne_dane$k.point)
+```
 
+
+## Jak rozkłada się długość skoków?
+Najpierw chcę dowiedzieć się jak wygląda rozkład skoków względem długości w całym sezonie 2013/14.
+
+```{r}
 ostateczne_dane %>%
   ggplot() +
-  geom_histogram(mapping = aes(x=dist_prop), col="black", fill="lightblue", bins =30) +
-  labs(title="Rozkład proporcji długości skoku do punktu k skoczni",
-       x="proporcja odległości do punktu k danej skoczni(>1 - skok za punkt k, <1 - skok przed punktem k)",
-       y="liczba skoków")
+  geom_histogram(mapping = aes(x=dist_prop), col='white', fill = '#18bc9c', bins =30, alpha = 0.8) +
+  geom_vline(xintercept = 1, linetype="dashed", col='#f39c12', linewidth = 1) +
+  annotate("text", x =1.04, y = 600, label = "Punkt K") +
+  labs(title="Rozkład proporcji długości skoku do punktu K skoczni",
+       x="Współczynnik odległości",
+       y="Liczba skoków") +
+  theme_minimal()
+
+                      
 ```
 
 **wnioski:**
-Widzimy na podstawie wykresu, że rozkład długości skoku, w zależności od skoczni, jest lewostronnie skośny. Najwięcej skoczków skacze kawałek dalej niż punkt k, lecz ilość skoczków, którzy nie dolatują do punktu k, jest znacznie większa, w porównaniu do tych, którzy lecą dalej - więcej skoków krótszych niż dalszych.
+Widzimy na podstawie wykresu, że rozkład długości skoku, w zależności od skoczni, jest lewostronnie skośny. Najwięcej skoczków oddaje swoje próby kawałek dalej niż punkt k, lecz ilość sportowców, którzy nie dolatują do punktu k, jest znacznie większa, w porównaniu do tych, którzy uzyskują dalsze wyniki - **więcej skoków krótszych niż dalszych.**
 
-### 2. Rozkład długości skoku w zależności od serii konkursu
+## Jak rozkłada się długość skoków w zależności od serii konkursu?
 
 W pierwszej serii konkursu skaczą wszyscy zakwalifikowani skoczkowie, w drugiej zostaje najlepsza trzydziestka. Można by założyć hipotezę, że skoczkowie z drugiej serii, powinni latać dalej, czy tak będzie naprawdę?
 
 ```{r}
+kolory_wykresow <- c("1st round" = "#2c3e50", "2nd round" = "#18bc9c")
+
 ostateczne_dane %>%
   ggplot() +
-  geom_density(mapping = aes(x=dist_prop, fill = round), alpha=0.5) +
-  labs(title="Rozkład proporcji długości skoku do punktu k skoczni w zależności na rundę",
-       x="proporcja odległości do punktu k danej skoczni",
-       y="gęstość",
-       fill="runda")
+  geom_density(mapping = aes(x=dist_prop, fill = round), col= "white", alpha=0.5) +
+  geom_vline(xintercept = 1, linetype="dashed", col='#f39c12', linewidth = 1) +
+  annotate("text", x =1.04, y = 6, label = "Punkt K") +
+  scale_fill_manual(
+    values = kolory_wykresow,
+    labels = c("1 runda", "2 runda")
+    ) +
+  labs(title="Porównanie rozkładów długości skoków w zależności od rundy konkursu",
+       x="Współczynnik odległości",
+       y="Gęstość",
+       fill="Runda") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 ```
 
 **wnioski:**
-Rozkład pozostaje podobny do ogólnego rozkładku skoków i faktycznie widzimy, że skoczkowie w drugiej rundzie skaczą częściej za punkt k, w porównaniu do skoczków z 1 rundy. Jest to spowodowane tym, że w drugiej rundzie zostają tylko lepsi skoczkowie.
+Rozkład pozostaje podobny do ogólnego rozkładku skoków i faktycznie widzimy, że **skoczkowie w drugiej rundzie skaczą częściej za punkt k, w porównaniu do skoczków z 1 rundy**. Do drugiej serii awansuje najlepsza 30 zawodników z 1 etapu konkursu. Naturalnie wynika to z tego, że do 2 serii dostają się lepsi skoczkowie.
 
-### 3. Długości skoków w konkursach drużynowych, a w indywidualnych.
+## Czy typ konkursu wpływa na uzyskaną odległość skoku?
 Długość skoku można jeszcze analizować pod względem typu konkursu. W skokach narciarskich na czas sezonu 2013/14 istniały dwa typy konkursów: indywidualne (każdy skacze dla siebie), drużynowe (skoczkowie skaczą w drużynach po 4 skoczków, na państwo).
-Czy skoczkowie będą dalej latać, gdy skaczą dla siebie czy gdy skaczą dla drużyny?
+Czy skoczkowie będą dalej latać, wtedy kiedy skaczą dla siebie czy gdy skaczą dla drużyny?
 
 ```{r}
+kolory_wykresow <- c("0" = "#2c3e50", "1" = "#18bc9c")
+
 ostateczne_dane %>%
   ggplot() +
-  geom_density(mapping = aes(x=dist_prop, fill = team), alpha=0.5) +
-  labs(title="Rozkład proporcji długości skoku do punktu k skoczni w zależności na typ konkursu",
-       x="proporcja odległości do punktu k danej skoczni",
-       y="gęstość",
-       fill="typ konkursu(0 - indywidualny, 1 - drużynowy)")
+  geom_density(mapping = aes(x=dist_prop, fill = team), col = "white", alpha=0.5) +
+  geom_vline(xintercept = 1, linetype="dashed", col='#f39c12', linewidth = 1) +
+  annotate("text", x =1.04, y = 5.5, label = "Punkt K") +
+  scale_fill_manual(
+    values = kolory_wykresow,
+    labels = c("Indywidualny", "Drużynowy")
+    ) +
+  labs(title="Porównanie rozkładów długości skoków w zależności od typu konkursu",
+       x="Współczynnik odległości",
+       y="Gęstość",
+       fill="Typ konkursu") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 ```
 
 **wnioski:**
-Rozkłady są praktycznie identyczne - nie można zatem wnioskować, że typ konkursu wpływa na odległość skoku uczestnika. Można stwierdzić, że w obu przypadkach skoczkowie dają z siebie wszystko.
+Rozkłady są praktycznie identyczne - nie można zatem wnioskować, **że typ konkursu wpływa na odległość skoku uczestnika**. Widzimy zatem, że skoczkowie mają podobną motywację, 
 
-### 4. Długość skoku, a skocznia
-Długość skoku można jeszcze analizować pod kątem miejscowości i konkretnej skoczni, na której skok został oddany. Na których skoczniach skoczkowie radzą sobie najlepiej, a na których najgorzej?
+## Na jakich skoczniach lata się najdalej?
+Długość skoku można jeszcze analizować pod kątem miejscowości i konkretnej skoczni, na której skok został oddany. Interesowało mnie na których skoczniach zawodnicy radzą sobie lepiej, a na których już trochę gorzej.
 ```{r}
 ostateczne_dane %>%
   ggplot() +
-  geom_boxplot(aes(x=location, y=dist_prop), fill="lightblue") +
-  labs(title="Długość skoku w zależności od skoczni",
-       x="skocznia",
-       y="proporcja odległości punktu k danej skoczni") +
-  coord_flip()
-
-ostateczne_dane %>%
-  group_by(location) %>%
-  summarise(mediana = median(dist_prop), srednia = mean(dist_prop)) %>%
-arrange(desc(mediana))
-
-ostateczne_dane %>%
-  group_by(location) %>%
-  summarise(mediana = median(dist_prop), srednia = mean(dist_prop)) %>%
-arrange(mediana)
+  geom_boxplot(aes(x= reorder(location, dist_prop, FUN=median), y = dist_prop), fill="#18bc9c", outlier.color = "#e74c3c") +
+  geom_hline(yintercept = 1, linetype="dashed", col='#f39c12', linewidth = 1) +
+  labs(title="Ranking skoczni względem długości skoku",
+       x="Lokalizacja skoczni",
+       y="Współczynnik odległości") +
+  coord_flip() +
+  theme_minimal()
 ```
 
 **wnioski:**
-Na podstawie wykresu można stwierdzić, że skoczkowie oddawali dłuższe skoki  w Garmisch-Partenkirchen, Titisee-Neustadt . Natomiast krótsze skoki oddawane były w Iron Mountain, Nizhny Tagil. To porównanie, nie bierze pod uwagę warunków pogodowych czy innych czynników, do których przejdziemy później. Tu interesuje nas jeszcze sama odległość, a skocznia. Potwierdzeniem wyników z wykresu są obliczone przeze mnie statystyki opisowe.
+Na podstawie wykresu można stwierdzić, że skoczkowie oddawali dłuższe skoki w **Garmisch-Partenkirchen i Titisee-Neustadt**. Natomiast krótsze skoki oddawane były w **Iron Mountain czy Nizhny Tagil**. Widzimy też, że tam gdzie zawodnicy latali dalej, wariancje długości oddanych prób są krótsze, rozrzut długości jest niewielki, natomiast tam gdzie skoczkowie przeciętnie latali krócej, już ten rozrzut jest znacznie większy, co pokazuje, że dla sportowców, technicznie są to cięższe skocznie. Możemy też zauważyć outliery, które będą symbolizować, przeważnie bardzo krótkie próby, lecz jest też kilka prób, gdzie skoczkowie wyróżnili się pod względem długości wobec konkurencji.
 
-### 5. Jak na danej skoczni wygląda odsetek skoków oddanych poza jej rozmiar?
+## Jak na danej skoczni wygląda odsetek skoków oddanych poza jej rozmiar?
 Ciekawiło mnie, na których skoczniach skoczkowie częściej oddają skoki poza jej rozmiar. Do tego pytania potrzebna będzie mi nowa zmienna, która będzie stwierdzać czy dany skok został oddany poza rozmiar skoczni czy nie. Po odpowiednim filtrowaniu, robię wykres.
 ```{r}
 ostateczne_dane <- ostateczne_dane %>%
@@ -267,21 +294,22 @@ over_hs_ski_jump <- ostateczne_dane %>%
 
 over_hs_ski_jump %>%
   ggplot() +
-  geom_col(aes(x = reorder(location, percent_over_hs), y = percent_over_hs), col = 'black', fill='lightblue') +
+  geom_col(aes(x = reorder(location, percent_over_hs), y = percent_over_hs), col = 'white', fill='#18bc9c') +
   coord_flip() +
    labs(
-    title = "Odsetek skoków za HS w podziale na skocznię",
-    x = "nazwa skoczni",
-    y = "odsetek skoków poza HS (%)"
-  )
+    title = "Odsetek skoków za rozmiar skoczni w podziale na skocznię",
+    x = "Lokalizacja skoczni",
+    y = "Odsetek skoków poza rozmiar skoczni (%)"
+  ) +
+  theme_minimal()
 
 
 ```
 
 **wnioski:**
-Z wykresu możemy odczytać, że odsetek skoków poza rozmiar skoczni najwyższy był w Willingen (7,5%) i w Innsbrucku (6%). A skocznie, na których w sezonie 2013/14 w ogóle nie oddano skoków poza rozmiar skoczni (0%), to: Harrachov, Nizhny Tagil, Oslo, Predazzo, Trondheim.
+Z wykresu możemy odczytać, że odsetek skoków poza rozmiar skoczni **najwyższy był w Willingen (7,5%) i w Innsbrucku (6%)**. A skocznie, na których w sezonie 2013/14 w ogóle **nie oddano skoków poza rozmiar skoczni (0%), to: Harrachov, Nizhny Tagil, Oslo, Predazzo, Trondheim**.
 
-### 6. Którzy skoczkowie i ile razy latali za HS w sezonie 2013/14?
+## Którzy skoczkowie i ile razy latali za HS w sezonie 2013/14?
 
 Wiemy już na których skoczniach skoczkowie najczęściej oddawali skoki poza HS. Teraz pytanie, który ze skoczków oddał ich najwięcej? Tak jak wcześniej, najpierw filtrowanie i grupowanie, potem wykres (pokazuję tylko skoczków, co mieli więcej niż jeden skok za rozmiar skoczni).
 
@@ -296,31 +324,36 @@ over_hs_ski_jumpers<- ostateczne_dane %>%
 
 over_hs_ski_jumpers %>%
   ggplot() +
-  geom_col(aes (x = reorder(name, over_hs_jumps), y = over_hs_jumps), fill = "lightblue", col="black") +
+  geom_col(aes (x = reorder(name, over_hs_jumps), y = over_hs_jumps), fill = "#18bc9c", col="white") +
   coord_flip() +
    scale_y_continuous(breaks = seq(0, max(over_hs_ski_jumpers$over_hs_jumps), by = 1)) +
   labs(
-    title = "Zawodnicy z więcej niż jednym skokiem za HS",
-    x = "zawodnik",
-    y = "ilość skoków za HS"
-  )
+    title = "Zawodnicy z co najmniej jednym skokiem za rozmiar skoczni",
+    x = "Zawodnik",
+    y = "Ilość skoków za rozmiar skoczni"
+  ) +
+  theme_minimal()
 
 ```
 
 **wnioski:**
-Widzimy, że najwięcej skoków za HS oddawali: Peter Prevc, Kamil Stoch i Severin Freund. Jest to trójka najlepszych zawodników pod względem punktacji w sezonie, z tym faktem, że Kamil Stoch wyprzedził Petera Prevca, który miał o jeden skok za rozmiar skoczni więcej. Widać, że ilość skoków za HS nie jest gwarancją wygranej w sezonie.
+Widzimy, że najwięcej skoków za HS oddawali: **Peter Prevc, Kamil Stoch i Severin Freund**. Jest to trójka najlepszych zawodników pod względem punktacji w sezonie, z tym faktem, że Kamil Stoch wyprzedził Petera Prevca, który miał o jeden skok za rozmiar skoczni więcej. Widać, że ilość skoków za HS nie jest gwarancją wygranej w sezonie.
 
-### 7. Długość skoku, a pogoda panująca na skoczni.
+## Jak pogoda wpływa na długość skoku?
 Ciekawym aspektem może być zależność pomiędzy długością skoku, a pogodą panującą na skoczni. Wiadomo, że warunki atmosferyczne mają wpływ na skok, teraz pytanie jest, w jakiej pogodzie, skoczkowie oddawali dłuższe skoki, a które warunki powodowały krótszy wynik.
 
 ```{r}
 ostateczne_dane %>%
+  group_by(weather_type) %>%
+  filter(n() > 50) %>%
   ggplot() +
-  geom_boxplot(aes(x=weather_type, y=dist_prop), fill="lightblue") +
+  geom_boxplot(aes(reorder(x=weather_type, dist_prop, FUN=median), y=dist_prop), fill="#18bc9c", outlier.color ="#e74c3c" ) +
+  geom_hline(yintercept = 1, linetype="dashed", col='#f39c12', linewidth = 1) +
   labs(title="Długość skoku w zależności od pogody",
-       x="pogoda",
-       y="proporcja odległości punktu k danej skoczni") +
-  coord_flip()
+       x="Warunki atmosferyczne",
+       y="Współczynnik odległości") +
+  coord_flip() +
+  theme_minimal()
 
 ostateczne_dane %>%
   group_by(weather_type) %>%
@@ -331,9 +364,9 @@ arrange(desc(mediana))
 ```
 
 **wnioski:**
-Z powyższych wyników widzimy, że sposób zapisu zmiennej weather_type przez FiS sprawia, że ogólne określenie panującej pogody, nie jest bardzo miarodajne jeżeli chodzi o porównanie relacji z długością skoku. Jakbyśmy chcieli się uprzeć i coś z tego spróbować wywnioskować, to pominąłbym kategorie z mniejszą licznością <=50 i wtedy mógłbym wnioskować, że dłuższe skoki były oddawane w pogodzie pochmurnej, a w pogodzie gdzie deszcz padał ze śniegiem, skoki były krótsze. Jednak dla dokładniejszej analizy warto lepiej spojrzeć na konkretne wartości poszczególnych zmiennych pogodowych.
+Filtruję wstępnie dane, pozbywam się grup z licznością n<50, aby nie zaburzyć sobie wykresu nieistotnym szumem. Widzę, że **dłuższe skoki były oddawane kiedy było pochmurnie, padał deszcz lub kiedy było czyste niebo**. Krótsze skoki były oddawane szczególnie, kiedy występował deszcz ze śniegiem. **Dla porównania tworzę tabelę, w której już widzę inne wyniki, lecz jest to związane ze zbyt małą licznością grup**.
 
-### 8. Długość skoku, a konkretne warunki pogodowe.
+## Wpływ konkretnych warunków pogodowanych na długość skoku
 W moich danych mam kilka zmiennych opisujących już dokładniejsze warunki atmosferyczne. Są to: `wind` - prędkość wiatru w metrach na sekundę (dodatnia - wiatr pod narty, ujemna - wiatr z tyłu skoczni), `humid` - wilgotność powietrza, `snow_temperature` - temperatura śniegu na najeździe, `air_temperature` - temperatura powietrza. Mam kolejny problem - wartości zmiennych `humid`, `snow_temperature` i `air_temperature` są średnimi wartościami, dla danego konkursu, a nie dla konkretnego skoku. Zmienna `wind` już jest dla każdego skoku. Dlatego wykonam dwa porównania, jedną dla wiatru i drugą dla pozostałych zmiennych, mając na uwadze, że ich wartości są uśrednione. Do korelacji w tym i kolejnym podpunkcie używam metody spearmana - rozkład zmiennej "dist_prop" nie jest normalny.
 
 ```{r}
@@ -342,19 +375,31 @@ round(cor1, 2)
 
 cor2=cor(ostateczne_dane[,c("dist_prop", "humid", "snow_temperature", "air_temperature")], method = "spearman")
 
-corrplot(cor2, method = "square", type = "upper")
+corrplot(cor2, 
+         method = "color",
+         type = "upper",
+         title = "Korelacja Dystans vs Pogoda",
+         mar = c(0,0,2,0),
+         addCoef.col = "black"
+         )
 ```
 
 **wnioski:**
 Z policzonej korelacji dla zmiennej `wind` widzimy, że istnieje mała korelacja dodatnia - nie jest ona na tyle duża, aby istniał jakiś silniejszy związek. Dla zmiennych `humid`, `snow_temperature` i `air_temperature` korelacja jest bliska 0 - związki tym bardziej nie istnieją, może to być spowodowane tym, że korzystam z danych uśrednionych, bo inne nie występowały w oryginalnym zbiorze.
 
-### 9. Długość skoku, a statystyki techniczne.
+## Długość skoku, a statystyki techniczne.
 Po analizie warunków pogodowych, nie wyszło nam wiele zależności, w stosunku do długości oddanego skoku. Może patrząc od strony technicznej otrzymamy jakieś lepsze związki.
 Będziemy brali pod uwagę zmienne `speed` - prędkość na progu `note_points` - sumaryczna ocena sędziów, `jump_gate` - belka, z której skakał zawodnik. Badane zmienne znowu będziemy porównywać do długości lotu w stosunku do punktu k na danej skoczni.
 
 ```{r}
 cor3=cor(ostateczne_dane[,c("dist_prop", "speed", "note_points", "jump_gate")], method="spearman")
-corrplot(cor3, method = "square", type = "upper")
+corrplot(cor3,
+         method = "color",
+         type = "upper",
+         title = "Korelacja Dystans vs Parametry techniczne",
+         mar = c(0,0,2,0),
+         addCoef.col = "black"
+         )
 ```
 
 **wnioski:**
@@ -364,21 +409,21 @@ Z wykresu możemy odczytać, że wysoką dodatnią korelację w porównaniu z od
 
 Skoki narciarskie to bardzo złożona tematyka, a zależności w niej można by się doszukiwać bez końca. Chciałbym krótko podsumować, jakie wnioski udało mi się wyciągnąć z przeprowadzonej EDA. (wszystkie wnioski oparte są tylko i wyłącznie na sezonie zimowym 2013/14 mężczyzn, na skokach konkursowych):
 
-- Rozkład długości skoku w zależności od skoczni jest lewostronny, jest więcej skoków przed punkt K niż za punkt K.
+- Rozkład długości skoku w zależności od skoczni jest lewostronny, jest **więcej skoków przed punkt K niż za punkt K**.
 
-- Skoczkowie w rundzie drugiej częściej oddają skoki za punkt k w porównaniu do skoczków z 1 rundy.
+- Skoczkowie **w rundzie drugiej częściej** oddają skoki **za punkt k** w porównaniu do skoczków z 1 rundy.
 
-- Skoczkowie oddają podobnie długie skoki zarówno w konkursach drużynowych jak i indywidualnych
+- Skoczkowie oddają **podobnie długie skoki** zarówno w konkursach **drużynowych jak i indywidualnych**.
 
-- Skoczkowie oddawali ogólnie dłuższe skoki w Garmisch-Partenkirchen, Titisee-Neustadt, a krótsze w Iron Mountain i Nizhny Tagil
+- Skoczkowie oddawali ogólnie dłuższe skoki w **Garmisch-Partenkirchen, Titisee-Neustadt**, a krótsze w **Iron Mountain i Nizhny Tagil**.
 
-- Najwięcej skoków za hs było oddanych w Willingen i Innsbrucku, a ze skoczni, na których żaden skoczek nie doleciał za HS są: Harrachov, Nizhny Tagil, Oslo, Predazzo, Trondheim.
+- Najwięcej skoków za hs było oddanych w **Willingen i Innsbrucku**, a ze skoczni, na których żaden skoczek nie doleciał za HS są: **Harrachov, Nizhny Tagil, Oslo, Predazzo, Trondheim**.
 
-- Najwięcej skoków w sezonie 2013/14 za HS oddawali Peter Prevc, Kamil Stoch i Severin Freund.
+- Najwięcej skoków w sezonie 2013/14 **za HS** oddawali **Peter Prevc, Kamil Stoch i Severin Freund**.
 
-- Związek pomiędzy warunkami pogodowymi, a odległością skoku jest niewielki - wynika to z danych (skoczkowie skaczą podobnie daleko, nie ma dużych różnic)
+- **Związek pomiędzy warunkami pogodowymi, a odległością skoku jest niewielki** - wynika to z danych (skoczkowie skaczą podobnie daleko, nie ma dużych różnic)
 
-- Istnieje dodatni związek pomiędzy odległością skoku a notami za styl, bramka i prędkość na progu, nie mają aż tak dużego znaczenia (przyczyna podobna jak z warunkami pogodowymi)
+- Istnieje **dodatni związek pomiędzy odległością skoku a notami za styl**, bramka i prędkość na progu, nie mają aż tak dużego znaczenia (przyczyna podobna jak z warunkami pogodowymi)
 
 
 
