@@ -30,10 +30,10 @@ Podjąłem się analizy zbioru danych o skokach narciarskich. Oryginalny zbiór 
 ## Łączenie zbiorów
 Na 4 podzbiory składają się: `konkursy` - zawiera dane o wszystkich rozegranych konkursach z 2009-2021, `skoczkowie`- zawiera dane o wszystkich skoczkach z tego okresu `wyniki` - zawiera dane o wszystkich zarejestrowanych wynikach skoków z tego okresu, `statystyki` - zawiera statystyki pogodowe każdego z konkursów.
 ```{r}
-konkursy   <- read.csv("all_comps.csv")
-skoczkowie <- read.csv("all_names.csv")
-wyniki     <- read.csv("all_results.csv")
-statystyki <- read.csv("all_stats.csv")
+konkursy   <- read.csv("data/all_comps.csv")
+skoczkowie <- read.csv("data/all_names.csv")
+wyniki     <- read.csv("data/all_results.csv")
+statystyki <- read.csv("data/all_stats.csv")
 ```
 Swoją analizę będę chciał przeprowadzić, na okrojonych danych, gdyż oryginalny zbiór danych jest zbyt duży. Będę pracował na danych za sezon zimowy 2013/14 mężczyzn. Sezon ten rozpoczął się 22.11.2013r., a skończył się 23.03.2014r. Wstępnie filtruję dane o konkursach. Moim celem jest zobaczenie, czy uzyskam informacje o skokach ze wszystkich interesujących mnie konkursów, treningów i serii próbnych - ostateczne dane i tak będą musiały zostać ponownie przefiltrowane, to filtrowanie jest czysto poglądowe, mogłoby zostać pominięte.
 ```{r}
