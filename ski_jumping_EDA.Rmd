@@ -15,10 +15,7 @@ output:
 # Sekcja pakietów
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
-library(dplyr)
-library(stringr)
 library(psych)
-library(ggplot2)
 library(corrplot)
 ```
 
