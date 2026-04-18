@@ -5,6 +5,8 @@ This was a final project for an "Introduction to Data Analysis" course at 3rd se
 
 I started it back in January, and decided to put it on GitHub in April with the intention of making it more visually pleasing.
 
+The analysis was conducted in Polish, while the documentation was prepared in English for broader accessibility.
+
 ## Technologies Used
 * **R 4.5.0**
 * **tidyverse** (dplyr, ggplot2, tidyr)
